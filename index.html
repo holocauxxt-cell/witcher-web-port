@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#10110f">
+<title>Witcher Web Port — диагностика</title>
+<style>
+:root{color-scheme:dark;--bg:#10110f;--panel:#1a1c18;--line:#383a30;--gold:#c2a66b;--muted:#a6a494;--ok:#8eaf83;--warn:#d5ad68;--bad:#c87968}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% -20%,#333328 0,#151612 48%,#0d0e0c 100%);color:#e9e4d5;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}
+main{max-width:760px;margin:auto;padding:28px 16px calc(40px + env(safe-area-inset-bottom))}
+header{border-bottom:1px solid var(--line);padding:10px 0 22px;margin-bottom:22px}
+.kicker{color:var(--gold);font-size:11px;letter-spacing:.22em;text-transform:uppercase}
+h1{font-family:Georgia,serif;font-size:clamp(28px,7vw,44px);font-weight:500;letter-spacing:.02em;margin:8px 0}
+.sub{color:var(--muted);max-width:570px}.notice{border:1px solid #665638;background:#292419;border-radius:10px;padding:13px 14px;margin:18px 0;color:#e0d2b2;font-size:13px}
+h2{font:500 19px Georgia,serif;margin:26px 0 12px;color:#e8dfc8}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.item{background:linear-gradient(145deg,#20221d,#171814);border:1px solid var(--line);border-radius:10px;padding:14px;min-height:112px}
+.item .top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.name{font-weight:600}.state{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.detail{font-size:12px;color:var(--muted);margin-top:9px;overflow-wrap:anywhere}
+.dot{width:8px;height:8px;border-radius:50%;background:#777;display:inline-block;margin-right:6px}
+.ok .dot{background:var(--ok);box-shadow:0 0 9px #8eaf8377}.warn .dot{background:var(--warn)}.bad .dot{background:var(--bad)}
+.actions{display:flex;gap:10px;margin:18px 0;flex-wrap:wrap}
+button{border:1px solid #8a754e;background:#3a3222;color:#f0e4c8;padding:13px 17px;border-radius:8px;font:600 14px inherit;min-height:46px}
+button.secondary{background:#20221d;border-color:var(--line);color:#d8d2c1}
+button:active{transform:scale(.98)}
+.report{white-space:pre-wrap;background:#0c0d0b;border:1px solid var(--line);border-radius:10px;padding:14px;color:#c8c4b6;font:12px/1.55 ui-monospace,monospace;overflow-wrap:anywhere}
+footer{margin-top:24px;color:#77796e;font-size:11px}
+@media(max-width:480px){.grid{grid-template-columns:1fr}.item{min-height:0}}
+</style>
+</head>
+<body><main>
+<header><div class="kicker">Independent compatibility test · build 0.1</div><h1>WITCHER WEB PORT</h1><div class="sub">Диагностика браузерной среды iPhone. Проверяем возможности Safari до разработки слоя совместимости.</div></header>
+<div class="notice"><strong>Важно.</strong> Эта страница не запускает The Witcher 3 и не содержит её игровых файлов. Она измеряет доступные браузеру функции. Результаты сами по себе не доказывают, что REDengine 3 можно запустить в Safari.</div>
+<div class="actions"><button id="run">Запустить диагностику</button><button class="secondary" id="copy">Скопировать отчёт</button></div>
+<h2>Совместимость браузера</h2><section class="grid" id="results" aria-live="polite"></section>
+<h2>Сведения об устройстве</h2><div class="report" id="device">Нажми «Запустить диагностику».</div>
+<h2>Технический отчёт</h2><div class="report" id="report">Ожидание проверки…</div>
+<footer>WITCHER-WEB-PORT · Только локальные проверки API браузера · Никакие данные не отправляются на сервер.</footer>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let rows=[];
+function add(name,status,detail,level='warn'){rows.push({name,status,detail,level})}
+async function diagnose(){
+ rows=[]; $('run').disabled=true; $('run').textContent='Проверка…';
+ const wasm=typeof WebAssembly==='object';
+ add('WebAssembly',wasm?'Доступен':'Недоступен',wasm?'Браузер поддерживает WebAssembly.':'Нет объекта WebAssembly.',wasm?'ok':'bad');
+ let gl=null,gl2=false;
+ try{const c=document.createElement('canvas');gl=c.getContext('webgl2',{failIfMajorPerformanceCaveat:false});gl2=!!gl}catch(e){}
+ add('WebGL 2',gl2?'Доступен':'Недоступен',gl2?'Рендерер: '+(gl.getParameter(gl.RENDERER)||'не определён')+' · Максимальная текстура: '+gl.getParameter(gl.MAX_TEXTURE_SIZE):'Контекст WebGL 2 создать не удалось.',gl2?'ok':'bad');
+ const sab=typeof SharedArrayBuffer!=='undefined';
+ add('SharedArrayBuffer',sab?'Доступен':'Недоступен',sab?'Может использоваться для разделяемой памяти.':'Обычно требует cross-origin isolation (COOP/COEP).',sab?'ok':'warn');
+ const isolated=window.crossOriginIsolated===true;
+ add('Cross-origin isolation',isolated?'Включена':'Не включена', 'crossOriginIsolated = '+isolated,isolated?'ok':'warn');
+ let opfs='Недоступен',opfsLevel='warn';
+ try{if(navigator.storage&&navigator.storage.getDirectory){await navigator.storage.getDirectory();opfs='Доступен';opfsLevel='ok'}}catch(e){opfs='Ошибка доступа: '+e.name;opfsLevel='warn'}
+ add('OPFS',opfs,opfs==='Доступен'?'Корневой каталог доступен.':'File System Access API недоступен или запрещён в этом контексте.',opfsLevel);
+ const storage= navigator.storage&&navigator.storage.estimate ? await navigator.storage.estimate().catch(()=>null):null;
+ const mem= navigator.deviceMemory||null;
+ const cores=navigator.hardwareConcurrency||null;
+ const wasmThreads=wasm&&sab;
+ add('Потенциал потоков',wasmThreads?'Базовые условия есть':'Ограничен', 'WebAssembly + SharedArrayBuffer: '+wasmThreads+'. Это не полноценный тест потокового движка.',wasmThreads?'ok':'warn');
+ add('Оценка RAM',mem?mem+' ГБ (оценка браузера)':'Не раскрывается','deviceMemory — приблизительная категория, не точный замер.',mem?'warn':'warn');
+ const ua=navigator.userAgent;
+ const lines=[
+ 'User-Agent: '+ua,
+ 'Платформа: '+(navigator.platform||'не раскрыта'),
+ 'Язык: '+navigator.language,
+ 'Экран: '+screen.width+' × '+screen.height+' CSS px',
+ 'Плотность пикселей: '+(devicePixelRatio||'неизвестно'),
+ 'Ядра (hardwareConcurrency): '+(cores||'не раскрыто'),
+ 'RAM (deviceMemory): '+(mem?mem+' ГБ, приблизительно':'не раскрыта'),
+ 'Онлайн: '+navigator.onLine,
+ 'Secure context: '+isSecureContext,
+ 'Cross-origin isolated: '+isolated,
+ 'Storage quota: '+(storage&&storage.quota?Math.round(storage.quota/1048576)+' MiB':'неизвестно'),
+ 'Storage used: '+(storage&&storage.usage?Math.round(storage.usage/1048576)+' MiB':'неизвестно')
+ ];
+ $('device').textContent=lines.join('\n');
+ $('results').innerHTML=rows.map(r=>'<article class="item '+r.level+'"><div class="top"><span class="name"><i class="dot"></i>'+r.name+'</span><span class="state">'+r.status+'</span></div><div class="detail">'+r.detail.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div></article>').join('');
+ const summary=['WITCHER WEB PORT — BROWSER DIAGNOSTICS','Build: 0.1','Date: '+new Date().toISOString(),'','CHECKS:',...rows.map(r=>r.name+': '+r.status+' — '+r.detail),'','DEVICE:',...lines];
+ $('report').textContent=summary.join('\n');
+ $('run').disabled=false;$('run').textContent='Повторить диагностику';
+}
+$('run').addEventListener('click',diagnose);
+$('copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('report').textContent);$('copy').textContent='Скопировано';setTimeout(()=>$('copy').textContent='Скопировать отчёт',1600)}catch(e){$('copy').textContent='Не удалось скопировать'}});
+diagnose();
+</script></body></html>
