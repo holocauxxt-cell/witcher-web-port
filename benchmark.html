@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#10110f">
+<title>Witcher Web Port — 3D Benchmark</title>
+<style>
+:root{color-scheme:dark;--bg:#10110f;--panel:#1a1c18;--line:#383a30;--gold:#c2a66b;--muted:#a6a494;--ok:#8eaf83;--warn:#d5ad68;--bad:#c87968}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% -20%,#333328 0,#151612 48%,#0d0e0c 100%);color:#e9e4d5;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}
+main{max-width:760px;margin:auto;padding:24px 16px calc(36px + env(safe-area-inset-bottom))}
+header{border-bottom:1px solid var(--line);padding:8px 0 18px;margin-bottom:18px}.kicker{color:var(--gold);font-size:11px;letter-spacing:.2em;text-transform:uppercase}
+h1{font:500 clamp(28px,7vw,42px)/1.1 Georgia,serif;margin:8px 0}.muted{color:var(--muted)}
+.panel{background:#191b17;border:1px solid var(--line);border-radius:11px;padding:14px;margin:14px 0}
+canvas{display:block;width:100%;height:260px;background:#090b09;border:1px solid #383a30;border-radius:8px;touch-action:pan-y}
+.buttons{display:flex;gap:9px;flex-wrap:wrap;margin:14px 0}
+button{border:1px solid #8a754e;background:#3a3222;color:#f0e4c8;padding:12px 16px;border-radius:8px;font:600 14px -apple-system,BlinkMacSystemFont,sans-serif;min-height:46px}
+button.secondary{background:#20221d;border-color:var(--line);color:#d8d2c1}button:disabled{opacity:.45}
+.metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.metric{background:#11130f;border:1px solid var(--line);border-radius:8px;padding:11px}.metric b{display:block;font:500 25px Georgia,serif;color:#e7d5ad}.metric span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.progress{height:7px;background:#303127;border-radius:9px;overflow:hidden;margin-top:8px}.bar{height:100%;width:0;background:#b89b60;transition:width .15s}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0b0d0a;border:1px solid var(--line);border-radius:8px;padding:12px;font:12px/1.5 ui-monospace,monospace;color:#cbc7b8}
+.notice{border-left:3px solid var(--gold);padding:9px 12px;background:#242116;color:#d9cba9;font-size:13px}
+a{color:#d7bd83}footer{font-size:11px;color:#77796e;margin-top:22px}
+@media(max-width:420px){canvas{height:220px}}
+</style></head>
+<body><main>
+<header><div class="kicker">Witcher Web Port · Performance test 0.2</div><h1>3D BENCHMARK</h1><div class="muted">Измерение производительности WebGL 2 в Safari на твоём iPhone.</div></header>
+<div class="notice"><b>Безопасный короткий тест.</b> Он длится около 25 секунд, автоматически остановится после четырёх этапов и не загружает файлы игры. Если телефон заметно нагревается или Safari начинает тормозить, нажми «Стоп».</div>
+<section class="panel"><canvas id="view" aria-label="Тестовая 3D-сцена"></canvas><div class="progress"><div class="bar" id="bar"></div></div><div class="muted" id="status" style="margin-top:8px">Готов. Нажми «Начать тест».</div></section>
+<div class="buttons"><button id="start">Начать тест</button><button class="secondary" id="stop" disabled>Стоп</button><button class="secondary" id="copy" disabled>Скопировать статистику</button></div>
+<section class="panel"><div class="metrics">
+<div class="metric"><b id="fps">—</b><span>FPS сейчас</span></div>
+<div class="metric"><b id="avg">—</b><span>Средний FPS этапа</span></div>
+<div class="metric"><b id="low">—</b><span>1% low FPS*</span></div>
+<div class="metric"><b id="objects">0</b><span>3D-объекты</span></div>
+</div><p class="muted" style="font-size:11px">* 1% low — оценка по самому медленному 1% кадров на этапе.</p></section>
+<section class="panel"><b>Результаты этапов</b><pre id="results">Пока нет результатов.</pre></section>
+<section class="panel"><b>Как передать мне результат</b><p class="muted">После окончания нажми «Скопировать статистику» и вставь весь текст сюда в чат. Никакие данные автоматически никуда не отправляются.</p></section>
+<p><a href="./index.html">← Вернуться к диагностике браузера</a></p>
+<footer>Тестирует только производительность WebGL 2 в этой сцене. Результат не является замером производительности The Witcher 3 или REDengine 3.</footer>
+</main>
+<script>
+(()=>{
+const canvas=document.getElementById('view'),gl=canvas.getContext('webgl2',{antialias:false,alpha:false,powerPreference:'high-performance'});
+const $=id=>document.getElementById(id);
+if(!gl){$('status').textContent='WebGL 2 недоступен. Тест не может стартовать.';$('start').disabled=true;return;}
+const vs=`#version 300 es
+in vec3 aPos; in vec3 aOffset; in float aScale;
+uniform mat4 uProj; uniform float uTime;
+out vec3 vColor;
+void main(){
+ float t=uTime*0.35;
+ float c=cos(t),s=sin(t);
+ vec3 p=aPos*aScale;
+ p.xz=mat2(c,-s,s,c)*p.xz;
+ p+=aOffset;
+ gl_Position=uProj*vec4(p,1.0);
+ vColor=vec3(0.38+0.24*sin(aOffset.x*2.0),0.34+0.18*cos(aOffset.y*1.7),0.22+0.12*sin(aOffset.z));
+}`;
+const fs=`#version 300 es
+precision mediump float; in vec3 vColor; out vec4 outColor;
+void main(){float light=0.55+0.45*gl_FragCoord.y/ max(1.0, float(textureSize)); outColor=vec4(vColor*0.9,1.0);}
+`.replace('float(textureSize)','1.0');
+function shader(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s;}
+let program,vao;
+try{
+ program=gl.createProgram();gl.attachShader(program,shader(gl.VERTEX_SHADER,vs));gl.attachShader(program,shader(gl.FRAGMENT_SHADER,fs));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(program));
+ vao=gl.createVertexArray();gl.bindVertexArray(vao);
+ const vertices=new Float32Array([
+ -1,-1,-1, 1,-1,-1, 1,1,-1, -1,-1,-1, 1,1,-1, -1,1,-1,
+ -1,-1,1, 1,1,1, 1,-1,1, -1,-1,1, -1,1,1, 1,1,1,
+ -1,-1,-1, -1,1,-1, -1,1,1, -1,-1,-1, -1,1,1, -1,-1,1,
+ 1,-1,-1, 1,-1,1, 1,1,1, 1,-1,-1, 1,1,1, 1,1,-1,
+ -1,-1,-1, -1,-1,1, 1,-1,1, -1,-1,-1, 1,-1,1, 1,-1,-1,
+ -1,1,-1, 1,1,1, -1,1,1, -1,1,-1, 1,1,-1, 1,1,1
+ ]);
+ let b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,vertices,gl.STATIC_DRAW);
+ let p=gl.getAttribLocation(program,'aPos');gl.enableVertexAttribArray(p);gl.vertexAttribPointer(p,3,gl.FLOAT,false,0,0);
+ const max=900,offsets=new Float32Array(max*4);
+ for(let i=0;i<max;i++){let a=i*2.399963;let r=2.0+Math.sqrt(i/max)*4.5;offsets[i*4]=Math.cos(a)*r;offsets[i*4+1]=((i%17)-8)*.24;offsets[i*4+2]=Math.sin(a)*r;offsets[i*4+3]=.22+(i%5)*.025;}
+ b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,offsets,gl.STATIC_DRAW);
+ for(const [name,size,off] of [['aOffset',3,0],['aScale',1,12]]){p=gl.getAttribLocation(program,name);gl.enableVertexAttribArray(p);gl.vertexAttribPointer(p,size,gl.FLOAT,false,16,off);gl.vertexAttribDivisor(p,1);}
+}catch(e){$('status').textContent='Ошибка инициализации WebGL: '+e.message;$('start').disabled=true;return;}
+const uProj=gl.getUniformLocation(program,'uProj'),uTime=gl.getUniformLocation(program,'uTime');
+const stages=[100,300,600,900],stageSeconds=5;let running=false,raf=0,startTime=0,lastTime=0,frames=[],stageIndex=0,stageFrames=[],stageStart=0,stageResults=[],lastFps=0;
+function resize(){const dpr=Math.min(devicePixelRatio||1,1.5),w=Math.max(1,Math.floor(canvas.clientWidth*dpr)),h=Math.max(1,Math.floor(canvas.clientHeight*dpr));if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h);}const aspect=w/h;const f=1/Math.tan(Math.PI/7);return new Float32Array([f/aspect,0,0,0,0,f,0,0,0,0,-1.002,-1,0,0,-.2002,0]);}
+function draw(now){if(!running)return;const dt=lastTime?now-lastTime:16.7;lastTime=now;frames.push(dt);stageFrames.push(dt);if(frames.length>240)frames.shift();const count=stages[stageIndex];const proj=resize();gl.clearColor(.035,.043,.035,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.enable(gl.DEPTH_TEST);gl.useProgram(program);gl.bindVertexArray(vao);gl.uniformMatrix4fv(uProj,false,proj);gl.uniform1f(uTime,now/1000);gl.drawArraysInstanced(gl.TRIANGLES,0,36,count);
+ const fps=1000/Math.max(1,dt);$('fps').textContent=Math.round(fps);$('objects').textContent=count;
+ const elapsed=(now-stageStart)/1000,overall=(now-startTime)/1000;$('bar').style.width=((stageIndex+elapsed/stageSeconds)/stages.length*100)+'%';$('status').textContent='Этап '+(stageIndex+1)+' из '+stages.length+' · '+count+' объектов · '+Math.max(0,Math.ceil(stageSeconds-elapsed))+' сек.';
+ if(elapsed>=stageSeconds){finishStage();if(running){stageIndex++;if(stageIndex>=stages.length){stop(true);return;}stageFrames=[];stageStart=now;}}
+ raf=requestAnimationFrame(draw);
+}
+function finishStage(){const sorted=[...stageFrames].sort((a,b)=>a-b);const avg=stageFrames.length?1000/(stageFrames.reduce((a,b)=>a+b,0)/stageFrames.length):0;const lowCount=Math.max(1,Math.ceil(sorted.length*.01));const slow=sorted.slice(-lowCount).reduce((a,b)=>a+b,0)/lowCount;const low=slow?1000/slow:0;const row={objects:stages[stageIndex],avg:+avg.toFixed(1),low:+low.toFixed(1),samples:stageFrames.length};stageResults.push(row);$('avg').textContent=row.avg;$('low').textContent=row.low;$('results').textContent=stageResults.map((r,i)=>'Этап '+(i+1)+': '+r.objects+' объектов | средний '+r.avg+' FPS | 1% low '+r.low+' FPS | кадров '+r.samples).join('\n');}
+function stop(completed=false){running=false;cancelAnimationFrame(raf);$('start').disabled=false;$('stop').disabled=true;$('copy').disabled=stageResults.length===0;$('start').textContent=completed?'Повторить тест':'Продолжить новым тестом';$('status').textContent=completed?'Тест завершён. Скопируй статистику и отправь её в чат.':'Тест остановлен. Скопируй уже собранные результаты или запусти заново.';}
+function start(){if(running)return;stageResults=[];stageIndex=0;stageFrames=[];frames=[];startTime=performance.now();lastTime=0;stageStart=startTime;running=true;$('start').disabled=true;$('stop').disabled=false;$('copy').disabled=true;$('results').textContent='Тест выполняется…';$('avg').textContent='—';$('low').textContent='—';raf=requestAnimationFrame(draw);}
+function report(){const ua=navigator.userAgent;return ['WITCHER WEB PORT — WEBGL BENCHMARK','Build: 0.2','Date: '+new Date().toISOString(),'Device: '+(navigator.platform||'unknown'),'Screen: '+screen.width+'x'+screen.height,'DPR: '+devicePixelRatio,'Cores: '+(navigator.hardwareConcurrency||'unknown'),'Canvas: '+canvas.width+'x'+canvas.height,'WebGL: 2','User-Agent: '+ua,'','RESULTS:',...stageResults.map((r,i)=>'Stage '+(i+1)+' — '+r.objects+' objects; avg FPS '+r.avg+'; 1% low FPS '+r.low+'; frames '+r.samples),'','Note: synthetic instanced-cube benchmark only; not a Witcher 3 / REDengine performance test.'].join('\n');}
+$('start').addEventListener('click',start);$('stop').addEventListener('click',()=>stop(false));$('copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(report());$('copy').textContent='Скопировано';setTimeout(()=>$('copy').textContent='Скопировать статистику',1500)}catch(e){$('copy').textContent='Не удалось скопировать — выдели результаты вручную';}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&running)stop(false);});
+resize();
+})();
+</script></body></html>
