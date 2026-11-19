@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#11130f">
+<title>Witcher Web Port — World Prototype 0.1</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#11130f;color:#eee;font-family:-apple-system,BlinkMacSystemFont,sans-serif;touch-action:none}#view{position:fixed;inset:0}canvas{display:block;width:100%;height:100%}#hud{position:fixed;inset:0;pointer-events:none;padding:calc(env(safe-area-inset-top) + 12px) 14px calc(env(safe-area-inset-bottom) + 14px)}#top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.panel{background:#11140fbd;border:1px solid #77745a66;border-radius:9px;padding:9px 11px;backdrop-filter:blur(8px);font-size:12px;color:#ddd8c8}.brand{font:18px Georgia,serif;letter-spacing:.08em;color:#d4bd86}.small{font-size:10px;color:#a9a895;margin-top:3px}#status{text-align:right}#hint{position:absolute;top:72px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:11px;color:#d6d0bc;background:#11140f99;padding:7px 10px;border-radius:20px}#controls{position:absolute;left:0;right:0;bottom:0;height:190px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 22px 20px;pointer-events:none}#stick{width:124px;height:124px;border-radius:50%;border:1px solid #c4b78b66;background:#11140f66;position:relative;pointer-events:auto;touch-action:none}#nub{width:48px;height:48px;position:absolute;left:38px;top:38px;border-radius:50%;background:#c4b78b88;border:1px solid #e0d2a0;box-shadow:0 2px 12px #0008}#rightControls{display:flex;gap:10px;align-items:flex-end;pointer-events:auto}button{width:64px;height:64px;border-radius:50%;border:1px solid #d1bd83;background:#25271ed9;color:#eee0b6;font-weight:700;font-size:11px;touch-action:manipulation}button:active{background:#6b5935}#foot{position:absolute;bottom:calc(env(safe-area-inset-bottom) + 10px);left:50%;transform:translateX(-50%);font-size:10px;color:#aaa895;white-space:nowrap;pointer-events:none}@media(min-width:700px){#controls{max-width:900px;margin:auto;left:50%;transform:translateX(-50%);width:100%}}
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div id="hud">
+ <div id="top"><div class="panel"><div class="brand">WITCHER WEB PORT</div><div class="small">WORLD PROTOTYPE · BUILD 0.1</div></div><div class="panel" id="status">Загрузка сцены…<div class="small">WebGL / Three.js</div></div></div>
+ <div id="hint">Левый стик — движение · Проведи пальцем справа — камера</div>
+ <div id="controls"><div id="stick"><div id="nub"></div></div><div id="rightControls"><button id="dodge">УКЛОН</button><button id="attack">УДАР</button></div></div>
+ <div id="foot">Тестовая сцена · оригинальные временные модели · не содержит ресурсов The Witcher 3</div>
+</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
+const host=document.querySelector('#view'),status=document.querySelector('#status');
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x9aa39a);scene.fog=new THREE.Fog(0x9aa39a,24,92);
+const camera=new THREE.PerspectiveCamera(62,innerWidth/innerHeight,.1,180);
+const renderer=new THREE.WebGLRenderer({antialias:false,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;host.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xcbd6d2,0x454337,1.5));
+const sun=new THREE.DirectionalLight(0xffe4bd,2.1);sun.position.set(-18,28,12);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-35;sun.shadow.camera.right=35;sun.shadow.camera.top=35;sun.shadow.camera.bottom=-35;sun.shadow.bias=-.00025;scene.add(sun);
+const mat=(color,roughness=1)=>new THREE.MeshStandardMaterial({color,roughness});
+const groundMat=mat(0x59614b),trunkMat=mat(0x514437),leafMat=mat(0x354637),stoneMat=mat(0x77796e),darkStone=mat(0x50564f),clothMat=mat(0x353a36),leatherMat=mat(0x5a4430),metalMat=new THREE.MeshStandardMaterial({color:0x9b9b8d,metalness:.72,roughness:.35});
+const terrainGeo=new THREE.PlaneGeometry(180,180,90,90);terrainGeo.rotateX(-Math.PI/2);const p=terrainGeo.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),z=p.getZ(i);p.setY(i,Math.sin(x*.12)*.42+Math.cos(z*.1)*.35+Math.sin((x+z)*.055)*.5)}terrainGeo.computeVertexNormals();const ground=new THREE.Mesh(terrainGeo,groundMat);ground.receiveShadow=true;scene.add(ground);
+function box(parent,x,y,z,sx,sy,sz,material,cast=true){const m=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),material);m.position.set(x,y,z);m.castShadow=cast;m.receiveShadow=true;parent.add(m);return m}
+function tree(x,z,s=1){const g=new THREE.Group();g.position.set(x,0,z);const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.18*s,.28*s,3.4*s,7),trunkMat);trunk.position.y=1.7*s;trunk.castShadow=true;g.add(trunk);for(let j=0;j<3;j++){const crown=new THREE.Mesh(new THREE.ConeGeometry((1.55-j*.22)*s,2.7*s,7),leafMat);crown.position.y=(3.2+j*1.15)*s;crown.castShadow=true;g.add(crown)}scene.add(g)}
+let seed=9321;function rnd(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}
+for(let i=0;i<75;i++){const a=rnd()*Math.PI*2,r=13+rnd()*53;tree(Math.cos(a)*r,Math.sin(a)*r,.65+rnd()*.8)}
+// Ruined stone gate and scattered masonry
+for(let side of [-1,1]){const col=box(scene,side*3.4,2.2,-13,1.25,4.4,1.25,stoneMat);col.rotation.z=(rnd()-.5)*.08;box(scene,side*3.4,4.55,-13,1.6,.35,1.6,darkStone)}
+box(scene,0,4.65,-13,8,.65,1.35,stoneMat);
+for(let i=0;i<18;i++){const x=(rnd()-.5)*23,z=-7-rnd()*20;const b=box(scene,x,.35,z,.6+rnd()*1.6,.5+rnd()*.9,.6+rnd()*1.4,i%3?stoneMat:darkStone);b.rotation.set(rnd()*.2,rnd()*3,rnd()*.2)}
+// Player: lightweight articulated placeholder, not a production character rig
+const player=new THREE.Group();scene.add(player);player.position.set(0,0,4);
+const torso=box(player,0,1.25,0,.72,1.05,.42,clothMat);const pelvis=box(player,0,.68,0,.55,.42,.38,leatherMat);
+const head=new THREE.Mesh(new THREE.SphereGeometry(.25,10,8),mat(0xb4a18a));head.position.y=2;head.castShadow=true;player.add(head);
+const hair=new THREE.Mesh(new THREE.SphereGeometry(.26,10,7,0,Math.PI*2,0,Math.PI*.55),mat(0xd0c8b4));hair.position.y=2.1;hair.castShadow=true;player.add(hair);
+const shoulderL=box(player,-.5,1.55,0,.28,.35,.38,metalMat),shoulderR=box(player,.5,1.55,0,.28,.35,.38,metalMat);
+const armL=box(player,-.48,1.12,0,.2,.68,.22,leatherMat),armR=box(player,.48,1.12,0,.2,.68,.22,leatherMat);
+const legL=box(player,-.2,.28,0,.25,.65,.3,clothMat),legR=box(player,.2,.28,0,.25,.65,.3,clothMat);
+const sword=box(player,.72,1.12,-.08,.075,1.45,.12,metalMat);sword.rotation.z=-.18;
+const hilt=box(player,.72,1.72,-.08,.3,.08,.16,leatherMat);
+const cloak=box(player,0,1.25,.29,.78,1.25,.12,mat(0x282d2a));cloak.rotation.x=-.08;
+const state={x:0,y:0,camX:0,camY:0,walk:0,dodge:0,attack:0};let last=performance.now(),frames=0,fpsTime=0,fps=0;
+const stick=document.querySelector('#stick'),nub=document.querySelector('#nub');let active=false,pid=null;
+function setStick(e){const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;let dx=e.clientX-cx,dy=e.clientY-cy;const max=43,d=Math.hypot(dx,dy);if(d>max){dx=dx/d*max;dy=dy/d*max}state.x=dx/max;state.y=dy/max;nub.style.transform='translate('+dx+'px,'+dy+'px)'}
+stick.addEventListener('pointerdown',e=>{active=true;pid=e.pointerId;stick.setPointerCapture(pid);setStick(e)});stick.addEventListener('pointermove',e=>{if(active&&e.pointerId===pid)setStick(e)});function release(){active=false;pid=null;state.x=state.y=0;nub.style.transform='translate(0,0)'}stick.addEventListener('pointerup',release);stick.addEventListener('pointercancel',release);
+let lookId=null,lookX=0,lookY=0;renderer.domElement.addEventListener('pointerdown',e=>{if(e.clientX<innerWidth*.42)return;lookId=e.pointerId;lookX=e.clientX;lookY=e.clientY;renderer.domElement.setPointerCapture(lookId)});renderer.domElement.addEventListener('pointermove',e=>{if(e.pointerId!==lookId)return;state.camX-=(e.clientX-lookX)*.006;state.camY=THREE.MathUtils.clamp(state.camY+(e.clientY-lookY)*.003,-.22,.48);lookX=e.clientX;lookY=e.clientY});renderer.domElement.addEventListener('pointerup',()=>lookId=null);renderer.domElement.addEventListener('pointercancel',()=>lookId=null);
+document.querySelector('#dodge').addEventListener('pointerdown',e=>{e.preventDefault();state.dodge=.38});document.querySelector('#attack').addEventListener('pointerdown',e=>{e.preventDefault();state.attack=.42});
+const clock=new THREE.Clock();function animate(now){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.04);const moving=Math.hypot(state.x,state.y)>.08;state.walk+=dt*(moving?9:2);state.dodge=Math.max(0,state.dodge-dt);state.attack=Math.max(0,state.attack-dt);
+const forward=new THREE.Vector3(Math.sin(state.camX),0,Math.cos(state.camX));const right=new THREE.Vector3(forward.z,0,-forward.x);const move=right.multiplyScalar(state.x).add(forward.multiplyScalar(-state.y));if(move.lengthSq()>1)move.normalize();const speed=state.dodge>0?7:3.6;player.position.addScaledVector(move,speed*dt);player.position.x=THREE.MathUtils.clamp(player.position.x,-70,70);player.position.z=THREE.MathUtils.clamp(player.position.z,-70,70);if(moving)player.rotation.y=Math.atan2(move.x,move.z);
+const swing=Math.sin(state.walk)*.42*(moving?1:0);legL.rotation.x=swing;legR.rotation.x=-swing;armL.rotation.x=-swing*.55;armR.rotation.x=swing*.55;cloak.rotation.x=-.08+Math.sin(state.walk*.5)*.035;if(state.dodge>0){player.rotation.z=Math.sin((.38-state.dodge)/.38*Math.PI)*-.45} else player.rotation.z=THREE.MathUtils.damp(player.rotation.z,0,8,dt);if(state.attack>0)sword.rotation.x=-Math.sin((.42-state.attack)/.42*Math.PI)*1.25;else sword.rotation.x=0;
+const target=new THREE.Vector3(player.position.x,1.4,player.position.z);const behind=new THREE.Vector3(Math.sin(state.camX)*7,4.2+state.camY*5,Math.cos(state.camX)*7);const desired=target.clone().add(behind);camera.position.lerp(desired,1-Math.exp(-5*dt));camera.lookAt(target.x,target.y+.25,target.z);
+renderer.render(scene,camera);frames++;fpsTime+=dt;if(fpsTime>=1){fps=Math.round(frames/fpsTime);frames=0;fpsTime=0;status.innerHTML='FPS: '+fps+'<div class="small">Объектов: '+scene.children.length+' · Тени: '+(renderer.shadowMap.enabled?'ON':'OFF')+'</div>'}}
+requestAnimationFrame(animate);
+function resize(){camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)}addEventListener('resize',resize);
+status.innerHTML='Сцена готова<div class="small">Касание для управления</div>';
+</script>
+</body>
+</html>
